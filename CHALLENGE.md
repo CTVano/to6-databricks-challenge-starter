@@ -13,8 +13,9 @@ one notebook and the handoff files in Databricks, execute on Databricks compute,
 platform-produced files to GitHub. Do not develop or run a solution locally and then import it.
 
 The trainer provides a workspace, compute, read-only inputs, your own writable output schema,
-a starter with connection/read/write examples, your personal GitHub repository’s `main` branch, and the Codex session
-capture route. Complete the ungraded walkthrough of these operations before starting. Ask the
+a starter with connection/read/write examples, and the Codex session capture route. Create your
+own private GitHub repository from the starter and use its `main` branch. Complete the ungraded
+walkthrough of these operations before starting. Ask the
 trainer to resolve missing access; configuring accounts, compute or MCP is not part of this task.
 
 ## Supplied data

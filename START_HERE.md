@@ -5,8 +5,8 @@ submit its platform-produced files to your own GitHub repository. This starter s
 operations and an ungraded smoke check. It contains no Challenge solution. Read the assignment
 for the four required outcomes.
 
-Complete the ungraded connection walkthrough first. The Challenge is available for work and
-submission; automatic ability scoring is not enabled for this assignment.
+Complete the ungraded connection walkthrough first. Begin the task when your facilitator releases
+the Classroom assignment; automatic ability scoring is not enabled for this assignment.
 
 ## Before you start
 
