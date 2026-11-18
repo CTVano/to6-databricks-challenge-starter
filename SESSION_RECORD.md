@@ -8,6 +8,10 @@ the standing guide's local-code commit step.
 Your notebook and handoff are authored in Databricks. The Workstation only records the genuine
 Codex conversation and pulls unchanged platform exports. Keep your repository private.
 
+For this optional route, complete steps 1–2 before starting work and steps 3–5 after each
+practice or final submission. Step 6 is only for the completed task. Entire is the recorder
+that preserves your original conversation; its checkpoint is a saved record, not a task score.
+
 ## 1. Install the tested recorder in your Workstation
 
 This course walkthrough uses Entire **0.13.4**. Version 0.8.1 could not read the current Codex
@@ -117,6 +121,10 @@ run receipt still names the successful Databricks run.
 CHALLENGE.md and start the actual task. Repeat these finish steps after completing it.
 
 ## 6. Turn in the completed Challenge only
+
+Check [the task’s submission checklist](CHALLENGE.md#what-to-submit-and-how-it-is-checked)
+for the notebook, report and output evidence; this page adds the conversation-saving steps
+only when the trainer requires them.
 
 In Classroom, attach your repository **base URL** with **Add or create → Link**, add the final
 commit SHA in a private comment, and select **Turn in**. Ensure the invitation to reviewer
