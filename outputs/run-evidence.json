@@ -132,7 +132,9 @@
         ]
       ]
     },
-    "run_number": 1
+    "run_number": 1,
+    "status": "superseded",
+    "note": "superseded: earlier notebook version, before per-run export snapshots"
   },
   {
     "timestamp_utc": "2026-11-20T17:00:47.830635+00:00",
@@ -267,7 +269,9 @@
         ]
       ]
     },
-    "run_number": 2
+    "run_number": 2,
+    "status": "superseded",
+    "note": "superseded: earlier notebook version, before per-run export snapshots"
   },
   {
     "run_number": 3,
@@ -404,7 +408,9 @@
           0.13583333333333333
         ]
       ]
-    }
+    },
+    "status": "failed",
+    "note": "failed: Stage 4 raised KeyError after this record was written; not a complete run"
   },
   {
     "run_number": 4,
@@ -541,7 +547,9 @@
           0.13583333333333333
         ]
       ]
-    }
+    },
+    "status": "superseded",
+    "note": "superseded: complete run of an earlier notebook version, before per-run export snapshots"
   },
   {
     "run_number": 5,
@@ -678,6 +686,343 @@
           0.13583333333333333
         ]
       ]
+    },
+    "status": "superseded",
+    "note": "superseded: complete run of an earlier notebook version, before per-run export snapshots"
+  },
+  {
+    "run_number": 6,
+    "status": "complete",
+    "timestamp_utc": "2026-11-20T19:24:36.340055+00:00",
+    "notebook_url": "https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542",
+    "notebook_path": "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook",
+    "stages_run": "all stages (Run all): profile, batch decision, return_features, year split",
+    "rejection_run": {
+      "timestamp_utc": "2026-11-20T19:24:04.773231+00:00",
+      "notebook_url": "https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542",
+      "notebook_path": "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook",
+      "stage": "Stage 2: Completeness and uniqueness checks (batch decision)",
+      "rejected_table": "training.to6_challenge3_inputs.returns_initial",
+      "decision": "REJECTED",
+      "rules": {
+        "completeness": "required values ['return_id', 'tax_year', 'income', 'deduction'] must not be null",
+        "uniqueness": "each return_id must occur exactly once"
+      },
+      "rows_checked": 13,
+      "affected_record_count": 3,
+      "replacement_table": "training.to6_challenge3_inputs.returns_corrected",
+      "replacement_decision": "ACCEPTED"
+    },
+    "export_dir": "outputs/runs/run-6",
+    "tables": {
+      "training.to6_c3_562d757e9b79.return_features": [
+        [
+          "R01",
+          2022,
+          0.2
+        ],
+        [
+          "R02",
+          2022,
+          0.165
+        ],
+        [
+          "R03",
+          2022,
+          null
+        ],
+        [
+          "R04",
+          2022,
+          0.1475
+        ],
+        [
+          "R05",
+          2023,
+          0.144
+        ],
+        [
+          "R06",
+          2023,
+          0.14166666666666666
+        ],
+        [
+          "R07",
+          2023,
+          0.14
+        ],
+        [
+          "R08",
+          2023,
+          0.13875
+        ],
+        [
+          "R09",
+          2024,
+          null
+        ],
+        [
+          "R10",
+          2024,
+          0.137
+        ],
+        [
+          "R11",
+          2024,
+          0.13636363636363635
+        ],
+        [
+          "R12",
+          2024,
+          0.13583333333333333
+        ]
+      ],
+      "training.to6_c3_562d757e9b79.features_train": [
+        [
+          "R01",
+          2022,
+          0.2
+        ],
+        [
+          "R02",
+          2022,
+          0.165
+        ],
+        [
+          "R03",
+          2022,
+          null
+        ],
+        [
+          "R04",
+          2022,
+          0.1475
+        ]
+      ],
+      "training.to6_c3_562d757e9b79.features_validation": [
+        [
+          "R05",
+          2023,
+          0.144
+        ],
+        [
+          "R06",
+          2023,
+          0.14166666666666666
+        ],
+        [
+          "R07",
+          2023,
+          0.14
+        ],
+        [
+          "R08",
+          2023,
+          0.13875
+        ]
+      ],
+      "training.to6_c3_562d757e9b79.features_test": [
+        [
+          "R09",
+          2024,
+          null
+        ],
+        [
+          "R10",
+          2024,
+          0.137
+        ],
+        [
+          "R11",
+          2024,
+          0.13636363636363635
+        ],
+        [
+          "R12",
+          2024,
+          0.13583333333333333
+        ]
+      ]
+    },
+    "export_sha256": {
+      "return_features.csv": "382f97d69814056f81e58f6166b4b5761e46a17cfeb682046fd22b785827b2fb",
+      "features_train.csv": "85edc0fe84a534383e8d32e28e5dd0665ed615664095004ac3cd2bc64151f11b",
+      "features_validation.csv": "4f997086def1a1c98d298d5ddf6679dd357cf8ca02e318e8d1f8b76f09077ba8",
+      "features_test.csv": "f133daffb5d300f2c7fe1e8418ac9aea59a06f7345b2468c6710ddc2a8e10052"
+    }
+  },
+  {
+    "run_number": 7,
+    "status": "complete",
+    "timestamp_utc": "2026-11-20T19:26:16.607638+00:00",
+    "notebook_url": "https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542",
+    "notebook_path": "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook",
+    "stages_run": "all stages (Run all): profile, batch decision, return_features, year split",
+    "rejection_run": {
+      "timestamp_utc": "2026-11-20T19:25:46.154097+00:00",
+      "notebook_url": "https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542",
+      "notebook_path": "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook",
+      "stage": "Stage 2: Completeness and uniqueness checks (batch decision)",
+      "rejected_table": "training.to6_challenge3_inputs.returns_initial",
+      "decision": "REJECTED",
+      "rules": {
+        "completeness": "required values ['return_id', 'tax_year', 'income', 'deduction'] must not be null",
+        "uniqueness": "each return_id must occur exactly once"
+      },
+      "rows_checked": 13,
+      "affected_record_count": 3,
+      "replacement_table": "training.to6_challenge3_inputs.returns_corrected",
+      "replacement_decision": "ACCEPTED"
+    },
+    "export_dir": "outputs/runs/run-7",
+    "tables": {
+      "training.to6_c3_562d757e9b79.return_features": [
+        [
+          "R01",
+          2022,
+          0.2
+        ],
+        [
+          "R02",
+          2022,
+          0.165
+        ],
+        [
+          "R03",
+          2022,
+          null
+        ],
+        [
+          "R04",
+          2022,
+          0.1475
+        ],
+        [
+          "R05",
+          2023,
+          0.144
+        ],
+        [
+          "R06",
+          2023,
+          0.14166666666666666
+        ],
+        [
+          "R07",
+          2023,
+          0.14
+        ],
+        [
+          "R08",
+          2023,
+          0.13875
+        ],
+        [
+          "R09",
+          2024,
+          null
+        ],
+        [
+          "R10",
+          2024,
+          0.137
+        ],
+        [
+          "R11",
+          2024,
+          0.13636363636363635
+        ],
+        [
+          "R12",
+          2024,
+          0.13583333333333333
+        ]
+      ],
+      "training.to6_c3_562d757e9b79.features_train": [
+        [
+          "R01",
+          2022,
+          0.2
+        ],
+        [
+          "R02",
+          2022,
+          0.165
+        ],
+        [
+          "R03",
+          2022,
+          null
+        ],
+        [
+          "R04",
+          2022,
+          0.1475
+        ]
+      ],
+      "training.to6_c3_562d757e9b79.features_validation": [
+        [
+          "R05",
+          2023,
+          0.144
+        ],
+        [
+          "R06",
+          2023,
+          0.14166666666666666
+        ],
+        [
+          "R07",
+          2023,
+          0.14
+        ],
+        [
+          "R08",
+          2023,
+          0.13875
+        ]
+      ],
+      "training.to6_c3_562d757e9b79.features_test": [
+        [
+          "R09",
+          2024,
+          null
+        ],
+        [
+          "R10",
+          2024,
+          0.137
+        ],
+        [
+          "R11",
+          2024,
+          0.13636363636363635
+        ],
+        [
+          "R12",
+          2024,
+          0.13583333333333333
+        ]
+      ]
+    },
+    "export_sha256": {
+      "return_features.csv": "382f97d69814056f81e58f6166b4b5761e46a17cfeb682046fd22b785827b2fb",
+      "features_train.csv": "85edc0fe84a534383e8d32e28e5dd0665ed615664095004ac3cd2bc64151f11b",
+      "features_validation.csv": "4f997086def1a1c98d298d5ddf6679dd357cf8ca02e318e8d1f8b76f09077ba8",
+      "features_test.csv": "f133daffb5d300f2c7fe1e8418ac9aea59a06f7345b2468c6710ddc2a8e10052"
+    },
+    "comparison": {
+      "compared_with_run": 6,
+      "source": "outputs/runs/run-6/*.csv vs outputs/runs/run-7/*.csv",
+      "rows_compared": 24,
+      "rows_matching": 24,
+      "checksums_identical": {
+        "return_features.csv": true,
+        "features_train.csv": true,
+        "features_validation.csv": true,
+        "features_test.csv": true
+      },
+      "result": "identical"
     }
   }
 ]

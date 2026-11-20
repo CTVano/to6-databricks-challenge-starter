@@ -1,32 +1,50 @@
-[
-  {
-    "source_table": "training.to6_challenge3_inputs.returns_initial",
-    "return_id": "R01",
-    "taxpayer_id": "F0",
-    "tax_year": 2022,
-    "income": 100,
-    "deduction": 20,
-    "row_count": 2,
-    "rejection_reason": "duplicate return_id: occurs 2 times; each return must occur exactly once"
+{
+  "rejection_run": {
+    "timestamp_utc": "2026-11-20T19:25:46.154097+00:00",
+    "notebook_url": "https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542",
+    "notebook_path": "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook",
+    "stage": "Stage 2: Completeness and uniqueness checks (batch decision)",
+    "rejected_table": "training.to6_challenge3_inputs.returns_initial",
+    "decision": "REJECTED",
+    "rules": {
+      "completeness": "required values ['return_id', 'tax_year', 'income', 'deduction'] must not be null",
+      "uniqueness": "each return_id must occur exactly once"
+    },
+    "rows_checked": 13,
+    "affected_record_count": 3,
+    "replacement_table": "training.to6_challenge3_inputs.returns_corrected",
+    "replacement_decision": "ACCEPTED"
   },
-  {
-    "source_table": "training.to6_challenge3_inputs.returns_initial",
-    "return_id": "R01",
-    "taxpayer_id": "F0",
-    "tax_year": 2022,
-    "income": 100,
-    "deduction": 20,
-    "row_count": 2,
-    "rejection_reason": "duplicate return_id: occurs 2 times; each return must occur exactly once"
-  },
-  {
-    "source_table": "training.to6_challenge3_inputs.returns_initial",
-    "return_id": "R02",
-    "taxpayer_id": "F1",
-    "tax_year": 2022,
-    "income": null,
-    "deduction": 33,
-    "row_count": 1,
-    "rejection_reason": "missing required value: income"
-  }
-]
+  "affected_records": [
+    {
+      "source_table": "training.to6_challenge3_inputs.returns_initial",
+      "return_id": "R01",
+      "taxpayer_id": "F0",
+      "tax_year": 2022,
+      "income": 100,
+      "deduction": 20,
+      "row_count": 2,
+      "rejection_reason": "duplicate return_id: occurs 2 times; each return must occur exactly once"
+    },
+    {
+      "source_table": "training.to6_challenge3_inputs.returns_initial",
+      "return_id": "R01",
+      "taxpayer_id": "F0",
+      "tax_year": 2022,
+      "income": 100,
+      "deduction": 20,
+      "row_count": 2,
+      "rejection_reason": "duplicate return_id: occurs 2 times; each return must occur exactly once"
+    },
+    {
+      "source_table": "training.to6_challenge3_inputs.returns_initial",
+      "return_id": "R02",
+      "taxpayer_id": "F1",
+      "tax_year": 2022,
+      "income": null,
+      "deduction": 33,
+      "row_count": 1,
+      "rejection_reason": "missing required value: income"
+    }
+  ]
+}

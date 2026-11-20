@@ -298,12 +298,40 @@ else:
                     "stop before feature output.")
 print(next_action)
 
-# 5) Preserve the rejection evidence durably in the Git folder.
+# 5) Preserve the rejection evidence durably in the Git folder, together with a
+#    reference to the run that rejected the batch (timestamp + notebook link).
+from datetime import datetime, timezone
+try:
+    workspace_url = spark.conf.get("spark.databricks.workspaceUrl")
+except Exception:
+    workspace_url = None
+NOTEBOOK_ID = "127024866557542"  # workspace object id of this notebook
+notebook_path = "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook"
+NOTEBOOK_URL = (f"https://{workspace_url}/editor/notebooks/{NOTEBOOK_ID}"
+                if workspace_url else notebook_path)
+
 offending_records = [{"source_table": INITIAL_TABLE, **r.asDict()} for r in offending]
+rejection_reference = {
+    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    "notebook_url": NOTEBOOK_URL,
+    "notebook_path": notebook_path,
+    "stage": "Stage 2: Completeness and uniqueness checks (batch decision)",
+    "rejected_table": INITIAL_TABLE,
+    "decision": initial_decision,
+    "rules": {"completeness": f"required values {REQUIRED_COLUMNS} must not be null",
+              "uniqueness": f"each {UNIQUENESS_COLUMN} must occur exactly once"},
+    "rows_checked": initial_rows,
+    "affected_record_count": len(offending_records),
+    "replacement_table": CORRECTED_TABLE,
+    "replacement_decision": corrected_decision,
+}
 (repo_root / "outputs").mkdir(exist_ok=True)
 (repo_root / "outputs" / "initial-rejection-evidence.json").write_text(
-    json.dumps(offending_records, indent=2) + "\n", encoding="utf-8"
+    json.dumps({"rejection_run": rejection_reference, "affected_records": offending_records},
+               indent=2) + "\n",
+    encoding="utf-8",
 )
+print(f"rejection run reference: {rejection_reference['timestamp_utc']} — {NOTEBOOK_URL}")
 
 # 6) Gate for stage 3: features may only be built from an ACCEPTED batch.
 assert initial_decision == "REJECTED", "the initial batch was expected to fail the checks"
@@ -458,83 +486,128 @@ split_ids = {r["return_id"] for r in combined.select("return_id").collect()}
 assert feature_ids == split_ids, "the split tables must hold exactly the accepted returns"
 print(f"split verified: {len(split_ids)} returns, each in exactly one table, in its assigned year")
 
-# 3) Keep this run's actual IDs and values; compare the latest two complete runs
+# 3) This run's actual IDs and values. The run is only appended to
+#    outputs/run-evidence.json at the very END of this cell, so a run that fails
+#    part-way is never recorded as a complete run.
+import hashlib
+import pandas as pd
+
 def rows(frame):
     return [[r["return_id"], r["tax_year"], r["deduction_to_income"]]
             for r in frame.orderBy("return_id").collect()]
 
-try:
-    workspace_url = spark.conf.get("spark.databricks.workspaceUrl")
-except Exception:
-    workspace_url = None
-notebook_path = "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook"
-NOTEBOOK_ID = "127024866557542"  # workspace object id of this notebook
+evidence_path = repo_root / "outputs" / "run-evidence.json"
+runs = json.loads(evidence_path.read_text(encoding="utf-8")) if evidence_path.exists() else []
+# Label records written by earlier versions of this notebook so they are not
+# mistaken for the compared runs.
+EARLIER_RUN_NOTES = {
+    1: "superseded: earlier notebook version, before per-run export snapshots",
+    2: "superseded: earlier notebook version, before per-run export snapshots",
+    3: "failed: Stage 4 raised KeyError after this record was written; not a complete run",
+    4: "superseded: complete run of an earlier notebook version, before per-run export snapshots",
+    5: "superseded: complete run of an earlier notebook version, before per-run export snapshots",
+}
+for i, earlier in enumerate(runs, start=1):
+    earlier.setdefault("run_number", i)
+    if "status" not in earlier:
+        note = EARLIER_RUN_NOTES.get(earlier["run_number"], "superseded: earlier notebook version")
+        earlier["status"] = note.split(":")[0]
+        earlier["note"] = note
+run_number = max((r["run_number"] for r in runs), default=0) + 1
+export_dir = f"outputs/runs/run-{run_number}"
 run_record = {
-    "run_number": None,  # filled in below
+    "run_number": run_number,
+    "status": "complete",
     "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-    "notebook_url": (f"https://{workspace_url}/editor/notebooks/{NOTEBOOK_ID}"
-                     if workspace_url else notebook_path),
+    "notebook_url": NOTEBOOK_URL,
     "notebook_path": notebook_path,
     "stages_run": "all stages (Run all): profile, batch decision, return_features, year split",
+    "rejection_run": rejection_reference,
+    "export_dir": export_dir,
     "tables": {
         FEATURES_TABLE: rows(saved_features),
         **{table: rows(frame) for table, frame in split_frames.items()},
     },
 }
-evidence_path = repo_root / "outputs" / "run-evidence.json"
-runs = json.loads(evidence_path.read_text(encoding="utf-8")) if evidence_path.exists() else []
-for i, earlier in enumerate(runs, start=1):  # older records were saved before run numbers existed
-    earlier.setdefault("run_number", i)
-run_record["run_number"] = len(runs) + 1
-runs.append(run_record)
-evidence_path.write_text(json.dumps(runs, indent=2) + "\n", encoding="utf-8")
 
-# 3b) Side-by-side comparison of the latest two complete runs, row by row
+# 4) Small synthetic exports of the saved tables: a snapshot folder for THIS run
+#    (outputs/runs/run-<n>/) plus the latest copies directly in outputs/.
+run_dir = repo_root / export_dir
+run_dir.mkdir(parents=True, exist_ok=True)
+export_sha256 = {}
+for name, frame in [(FEATURES_TABLE, saved_features), *split_frames.items()]:
+    fname = f"{name.split('.')[-1]}.csv"
+    pdf = frame.orderBy("return_id").toPandas()
+    pdf.to_csv(run_dir / fname, index=False)
+    pdf.to_csv(repo_root / "outputs" / fname, index=False)
+    export_sha256[fname] = hashlib.sha256((run_dir / fname).read_bytes()).hexdigest()
+    print(f"exported {export_dir}/{fname} and outputs/{fname}")
+run_record["export_sha256"] = export_sha256
+
+# 5) Compare this run with the previous COMPLETE run, using the committed export
+#    files themselves: row-by-row values and a SHA-256 checksum per file.
 comparison_path = repo_root / "outputs" / "run-comparison.csv"
+previous = next((r for r in reversed(runs)
+                 if r.get("status") == "complete" and r.get("export_dir")), None)
 runs_match = None
-if len(runs) >= 2:
-    run_a, run_b = runs[-2], runs[-1]
+checksum_lines = ""
+if previous:
+    p, n = previous["run_number"], run_number
+    prev_dir = repo_root / previous["export_dir"]
     comparison_rows = []
-    for table in sorted(set(run_a["tables"]) | set(run_b["tables"])):
-        a = {r[0]: r for r in run_a["tables"].get(table, [])}
-        b = {r[0]: r for r in run_b["tables"].get(table, [])}
-        for rid in sorted(set(a) | set(b)):
-            ra, rb = a.get(rid), b.get(rid)
+    checksums_identical = {}
+    for fname in export_sha256:
+        a = pd.read_csv(prev_dir / fname, dtype={"return_id": str})
+        b = pd.read_csv(run_dir / fname, dtype={"return_id": str})
+        merged = a.merge(b, on="return_id", how="outer", suffixes=(f"_run{p}", f"_run{n}"),
+                         indicator=True)
+        for _, r in merged.sort_values("return_id").iterrows():
+            va, vb = r[f"deduction_to_income_run{p}"], r[f"deduction_to_income_run{n}"]
+            same_value = (pd.isna(va) and pd.isna(vb)) or va == vb
             comparison_rows.append({
-                "table": table,
-                "return_id": rid,
-                f"run{run_a['run_number']}_tax_year": ra[1] if ra else None,
-                f"run{run_b['run_number']}_tax_year": rb[1] if rb else None,
-                f"run{run_a['run_number']}_deduction_to_income": ra[2] if ra else None,
-                f"run{run_b['run_number']}_deduction_to_income": rb[2] if rb else None,
-                "match": ra == rb,
+                "export_file": fname,
+                "return_id": r["return_id"],
+                f"run{p}_tax_year": r[f"tax_year_run{p}"],
+                f"run{n}_tax_year": r[f"tax_year_run{n}"],
+                f"run{p}_deduction_to_income": va,
+                f"run{n}_deduction_to_income": vb,
+                "match": bool(r["_merge"] == "both"
+                              and r[f"tax_year_run{p}"] == r[f"tax_year_run{n}"] and same_value),
             })
-    # equal row counts per table as well (no appended copies)
-    counts_match = all(len(run_a["tables"][t]) == len(run_b["tables"].get(t, []))
-                       for t in run_a["tables"])
-    runs_match = counts_match and all(r["match"] for r in comparison_rows)
-    import pandas as pd
+        checksums_identical[fname] = previous["export_sha256"][fname] == export_sha256[fname]
     comparison_df = pd.DataFrame(comparison_rows)
     comparison_df.to_csv(comparison_path, index=False)
     display(comparison_df)
+    rows_matching = int(comparison_df["match"].sum())
+    runs_match = rows_matching == len(comparison_df) and all(checksums_identical.values())
+    run_record["comparison"] = {
+        "compared_with_run": p,
+        "source": f"{previous['export_dir']}/*.csv vs {export_dir}/*.csv",
+        "rows_compared": len(comparison_df),
+        "rows_matching": rows_matching,
+        "checksums_identical": checksums_identical,
+        "result": "identical" if runs_match else "different",
+    }
     summary_line = (
-        f"run {run_a['run_number']} ({run_a['timestamp_utc']}) vs run {run_b['run_number']} "
-        f"({run_b['timestamp_utc']}): {sum(r['match'] for r in comparison_rows)}/"
-        f"{len(comparison_rows)} rows match across {len(run_a['tables'])} tables -> "
+        f"run {p} ({previous['timestamp_utc']}) vs run {n} ({run_record['timestamp_utc']}), "
+        f"compared from the export files `{previous['export_dir']}/` and `{export_dir}/`: "
+        f"{rows_matching}/{len(comparison_df)} rows match and "
+        f"{sum(checksums_identical.values())}/{len(checksums_identical)} files have identical "
+        f"SHA-256 checksums -> "
         + ("IDENTICAL return IDs and values" if runs_match else "DIFFERENT — investigate")
     )
-    print(summary_line)
+    checksum_lines = "\n".join(
+        ["| Export file | Run " + str(p) + " SHA-256 | Run " + str(n) + " SHA-256 | Identical |",
+         "| --- | --- | --- | --- |"]
+        + [f"| `{f}` | `{previous['export_sha256'][f][:16]}…` | `{export_sha256[f][:16]}…` | "
+           f"{'yes' if checksums_identical[f] else 'NO'} |" for f in export_sha256]
+    )
 else:
-    summary_line = "first recorded run; rerun all stages to compare two complete successful runs"
-    print(summary_line)
+    summary_line = ("first run with per-run export snapshots; rerun all stages to compare "
+                    "two complete successful runs")
+print(summary_line)
 
-# 4) Small synthetic exports of the saved tables
-for name, frame in [(FEATURES_TABLE, saved_features), *split_frames.items()]:
-    export_path = repo_root / "outputs" / f"{name.split('.')[-1]}.csv"
-    frame.orderBy("return_id").toPandas().to_csv(export_path, index=False)
-    print(f"exported {export_path.name}")
-
-# 5) Handoff: SUBMISSION.md — built from this run's actual results
+# 6) Handoff: SUBMISSION.md — built from this run's actual results
 def _profile_line(p):
     years = ", ".join(f"{y['tax_year']}: {y['rows']}" for y in p["returns_by_year"])
     missing = ", ".join(f"{c}={n}" for c, n in p["missing_required_values"].items())
@@ -551,17 +624,36 @@ profile_table = "\n".join(
 )
 rejection_table = "\n".join(
     ["| return_id | tax_year | income | deduction | Reason |", "| --- | --- | --- | --- | --- |"]
-    + [f"| {r['return_id']} | {r['tax_year']} | {r['income']} | {r['deduction']} | "
+    + [f"| {r['return_id']} | {r['tax_year']} | "
+       f"{'null' if r['income'] is None else r['income']} | "
+       f"{'null' if r['deduction'] is None else r['deduction']} | "
        f"{r['rejection_reason']} |" for r in offending_records]
+)
+year_of_table = {t: y for y, t in YEAR_TABLES.items()}
+split_of_year = {y: t.split(".")[-1] for y, t in YEAR_TABLES.items()}
+feature_values_table = "\n".join(
+    ["| return_id | tax_year | deduction_to_income | Year table |", "| --- | --- | --- | --- |"]
+    + [f"| {rid} | {yr} | {'null' if val is None else val} | `{split_of_year[yr]}` |"
+       for rid, yr, val in run_record["tables"][FEATURES_TABLE]]
 )
 split_lines = "\n".join(
     f"- `{t}`: {len(run_record['tables'][t])} returns "
-    f"({', '.join(r[0] for r in run_record['tables'][t])})"
+    f"({', '.join(r[0] for r in run_record['tables'][t])}) — "
+    f"`outputs/{t.split('.')[-1]}.csv`"
     for t in YEAR_TABLES.values()
 )
+compared_runs = ([previous] if previous else []) + [run_record]
 run_lines = "\n".join(
-    f"- Run {r['run_number']}: {r['timestamp_utc']} — {r['notebook_url']} ({r.get('stages_run', 'all stages')})"
-    for r in runs[-2:]
+    [f"| Rejection of `{INITIAL_TABLE}` (Stage 2, run {run_number}) | "
+     f"{rejection_reference['timestamp_utc']} | {rejection_reference['notebook_url']} | "
+     f"REJECTED — {rejection_reference['affected_record_count']} affected records | "
+     f"`outputs/initial-rejection-evidence.json` |"]
+    + [f"| Complete successful run {r['run_number']} | {r['timestamp_utc']} | {r['notebook_url']} | "
+       f"all stages succeeded | `{r['export_dir']}/` |" for r in compared_runs]
+)
+earlier_lines = "\n".join(
+    f"- Run {r['run_number']} ({r['timestamp_utc']}): {r.get('note', r.get('status'))}"
+    for r in runs if r.get("export_dir") is None
 )
 
 submission = f"""# Handoff — checked feature dataset (to6 challenge 3)
@@ -592,46 +684,70 @@ submission = f"""# Handoff — checked feature dataset (to6 challenge 3)
   nonzero ratio verified against the source (R01: 20/100 = 0.2); zero-income returns
   (R03, R09) present with null ratios; saved table read back from the Catalog.
 - Stage 4 — every accepted return in exactly one year table, in its assigned year;
-  each run's actual IDs and values recorded in `outputs/run-evidence.json` and the latest
-  two complete runs compared; tables are overwritten each run (no appended copies).
+  each complete run exports its tables to its own folder `outputs/runs/run-<n>/`, and the
+  two complete runs are compared from those committed files (row by row and by SHA-256
+  checksum); tables are overwritten each run (no appended copies).
 
 ## Results
 
-### Stage 1 — full-batch profile (`outputs/input-profile.json`)
+### Stage 1 — full-batch profile
+Source file: `outputs/input-profile.json`
+
 {profile_table}
 
 ### Stage 2 — batch decision
+Source file: `outputs/initial-rejection-evidence.json` (rejection run reference + affected records)
+
 - `{INITIAL_TABLE}`: {initial_rows} rows -> **{initial_decision}**
 - `{CORRECTED_TABLE}`: {corrected_rows} rows -> **{corrected_decision}** (same rules)
 
-Affected initial records (`outputs/initial-rejection-evidence.json`):
+Affected initial records:
 
 {rejection_table}
 
 ### Stage 3 — `return_features` readback
+Source file: `outputs/return_features.csv` (same content as `{export_dir}/return_features.csv`)
+
 - {saved_features.count()} returns, one row each; columns exactly `return_id, tax_year, deduction_to_income`
 - Nonzero check: {check_id} = {src['deduction']} / {src['income']} = {expected_ratio} (saved value matches)
 - Zero-income returns kept with null ratio: {', '.join(zero_income_ids)}
 
+Saved values (as exported):
+
+{feature_values_table}
+
 ### Stage 4 — year split and repeat runs
+Source files: `outputs/features_train.csv`, `outputs/features_validation.csv`,
+`outputs/features_test.csv`; comparison in `outputs/run-comparison.csv`
+
 {split_lines}
-- {summary_line}
+
+**Repeat-run result:** {summary_line}
+
+{checksum_lines}
 
 ## Run references
+
+| Run | Timestamp (UTC) | Notebook | Result | Evidence file |
+| --- | --- | --- | --- | --- |
 {run_lines}
 
-Full per-run IDs and values: `outputs/run-evidence.json`; row-by-row side-by-side
-comparison: `outputs/run-comparison.csv`.
+All runs, with their actual IDs and values, are in `outputs/run-evidence.json`. Only the two
+complete runs above are compared. Earlier records in that file are labelled and not used:
+
+{earlier_lines}
 
 ## Final exports (this Databricks Git folder)
 - `notebook.py` — notebook source
 - `SUBMISSION.md` — this handoff
-- `outputs/input-profile.json` — stage 1 full-batch profile of both batches and lineage
-- `outputs/initial-rejection-evidence.json` — rejected records with reasons
+- `outputs/input-profile.json` — Stage 1 full-batch profile of both batches and lineage
+- `outputs/initial-rejection-evidence.json` — rejection run reference, rejected records and reasons
 - `outputs/return_features.csv`, `outputs/features_train.csv`,
-  `outputs/features_validation.csv`, `outputs/features_test.csv`
-- `outputs/run-evidence.json` — per-run timestamps, notebook URL, IDs and values
-- `outputs/run-comparison.csv` — side-by-side comparison of the two complete runs
+  `outputs/features_validation.csv`, `outputs/features_test.csv` — latest exports
+- `outputs/runs/run-{previous['run_number'] if previous else run_number}/` and `{export_dir}/` — the same four exports
+  from each of the two compared complete runs
+- `outputs/run-comparison.csv` — row-by-row comparison of the two runs' export files
+- `outputs/run-evidence.json` — every run's timestamp, notebook URL, status, IDs, values and checksums
 
 ## Could not verify
 - The supplied `source_lineage` view is the only lineage evidence; its own description
@@ -641,3 +757,8 @@ comparison: `outputs/run-comparison.csv`.
 """
 (repo_root / "SUBMISSION.md").write_text(submission, encoding="utf-8")
 print("wrote SUBMISSION.md")
+
+# 7) Last step: record this run as complete (only reached if everything above succeeded)
+runs.append(run_record)
+evidence_path.write_text(json.dumps(runs, indent=2) + "\n", encoding="utf-8")
+print(f"recorded complete run {run_number} in outputs/run-evidence.json")
