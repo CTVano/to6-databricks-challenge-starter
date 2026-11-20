@@ -1,0 +1,254 @@
+{
+  "summary": {
+    "compared_with_run": 8,
+    "run_a": {
+      "run_number": 8,
+      "timestamp_utc": "2026-11-20T19:42:52.706498+00:00",
+      "notebook_url": "https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542",
+      "files": {
+        "return_features": "outputs/run-8-return_features.json",
+        "features_train": "outputs/run-8-features_train.json",
+        "features_validation": "outputs/run-8-features_validation.json",
+        "features_test": "outputs/run-8-features_test.json"
+      }
+    },
+    "run_b": {
+      "run_number": 9,
+      "timestamp_utc": "2026-11-20T19:44:29.115444+00:00",
+      "notebook_url": "https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542",
+      "files": {
+        "return_features": "outputs/run-9-return_features.json",
+        "features_train": "outputs/run-9-features_train.json",
+        "features_validation": "outputs/run-9-features_validation.json",
+        "features_test": "outputs/run-9-features_test.json"
+      }
+    },
+    "rows_compared": 24,
+    "rows_matching": 24,
+    "checksums_identical": {
+      "return_features.json": true,
+      "features_train.json": true,
+      "features_validation.json": true,
+      "features_test.json": true
+    },
+    "result": "identical"
+  },
+  "rows": [
+    {
+      "export_file": "return_features.json",
+      "return_id": "R01",
+      "run8_tax_year": 2022,
+      "run9_tax_year": 2022,
+      "run8_deduction_to_income": 0.2,
+      "run9_deduction_to_income": 0.2,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R02",
+      "run8_tax_year": 2022,
+      "run9_tax_year": 2022,
+      "run8_deduction_to_income": 0.165,
+      "run9_deduction_to_income": 0.165,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R03",
+      "run8_tax_year": 2022,
+      "run9_tax_year": 2022,
+      "run8_deduction_to_income": null,
+      "run9_deduction_to_income": null,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R04",
+      "run8_tax_year": 2022,
+      "run9_tax_year": 2022,
+      "run8_deduction_to_income": 0.1475,
+      "run9_deduction_to_income": 0.1475,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R05",
+      "run8_tax_year": 2023,
+      "run9_tax_year": 2023,
+      "run8_deduction_to_income": 0.144,
+      "run9_deduction_to_income": 0.144,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R06",
+      "run8_tax_year": 2023,
+      "run9_tax_year": 2023,
+      "run8_deduction_to_income": 0.14166666666666666,
+      "run9_deduction_to_income": 0.14166666666666666,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R07",
+      "run8_tax_year": 2023,
+      "run9_tax_year": 2023,
+      "run8_deduction_to_income": 0.14,
+      "run9_deduction_to_income": 0.14,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R08",
+      "run8_tax_year": 2023,
+      "run9_tax_year": 2023,
+      "run8_deduction_to_income": 0.13875,
+      "run9_deduction_to_income": 0.13875,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R09",
+      "run8_tax_year": 2024,
+      "run9_tax_year": 2024,
+      "run8_deduction_to_income": null,
+      "run9_deduction_to_income": null,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R10",
+      "run8_tax_year": 2024,
+      "run9_tax_year": 2024,
+      "run8_deduction_to_income": 0.137,
+      "run9_deduction_to_income": 0.137,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R11",
+      "run8_tax_year": 2024,
+      "run9_tax_year": 2024,
+      "run8_deduction_to_income": 0.13636363636363635,
+      "run9_deduction_to_income": 0.13636363636363635,
+      "match": true
+    },
+    {
+      "export_file": "return_features.json",
+      "return_id": "R12",
+      "run8_tax_year": 2024,
+      "run9_tax_year": 2024,
+      "run8_deduction_to_income": 0.13583333333333333,
+      "run9_deduction_to_income": 0.13583333333333333,
+      "match": true
+    },
+    {
+      "export_file": "features_train.json",
+      "return_id": "R01",
+      "run8_tax_year": 2022,
+      "run9_tax_year": 2022,
+      "run8_deduction_to_income": 0.2,
+      "run9_deduction_to_income": 0.2,
+      "match": true
+    },
+    {
+      "export_file": "features_train.json",
+      "return_id": "R02",
+      "run8_tax_year": 2022,
+      "run9_tax_year": 2022,
+      "run8_deduction_to_income": 0.165,
+      "run9_deduction_to_income": 0.165,
+      "match": true
+    },
+    {
+      "export_file": "features_train.json",
+      "return_id": "R03",
+      "run8_tax_year": 2022,
+      "run9_tax_year": 2022,
+      "run8_deduction_to_income": null,
+      "run9_deduction_to_income": null,
+      "match": true
+    },
+    {
+      "export_file": "features_train.json",
+      "return_id": "R04",
+      "run8_tax_year": 2022,
+      "run9_tax_year": 2022,
+      "run8_deduction_to_income": 0.1475,
+      "run9_deduction_to_income": 0.1475,
+      "match": true
+    },
+    {
+      "export_file": "features_validation.json",
+      "return_id": "R05",
+      "run8_tax_year": 2023,
+      "run9_tax_year": 2023,
+      "run8_deduction_to_income": 0.144,
+      "run9_deduction_to_income": 0.144,
+      "match": true
+    },
+    {
+      "export_file": "features_validation.json",
+      "return_id": "R06",
+      "run8_tax_year": 2023,
+      "run9_tax_year": 2023,
+      "run8_deduction_to_income": 0.14166666666666666,
+      "run9_deduction_to_income": 0.14166666666666666,
+      "match": true
+    },
+    {
+      "export_file": "features_validation.json",
+      "return_id": "R07",
+      "run8_tax_year": 2023,
+      "run9_tax_year": 2023,
+      "run8_deduction_to_income": 0.14,
+      "run9_deduction_to_income": 0.14,
+      "match": true
+    },
+    {
+      "export_file": "features_validation.json",
+      "return_id": "R08",
+      "run8_tax_year": 2023,
+      "run9_tax_year": 2023,
+      "run8_deduction_to_income": 0.13875,
+      "run9_deduction_to_income": 0.13875,
+      "match": true
+    },
+    {
+      "export_file": "features_test.json",
+      "return_id": "R09",
+      "run8_tax_year": 2024,
+      "run9_tax_year": 2024,
+      "run8_deduction_to_income": null,
+      "run9_deduction_to_income": null,
+      "match": true
+    },
+    {
+      "export_file": "features_test.json",
+      "return_id": "R10",
+      "run8_tax_year": 2024,
+      "run9_tax_year": 2024,
+      "run8_deduction_to_income": 0.137,
+      "run9_deduction_to_income": 0.137,
+      "match": true
+    },
+    {
+      "export_file": "features_test.json",
+      "return_id": "R11",
+      "run8_tax_year": 2024,
+      "run9_tax_year": 2024,
+      "run8_deduction_to_income": 0.13636363636363635,
+      "run9_deduction_to_income": 0.13636363636363635,
+      "match": true
+    },
+    {
+      "export_file": "features_test.json",
+      "return_id": "R12",
+      "run8_tax_year": 2024,
+      "run9_tax_year": 2024,
+      "run8_deduction_to_income": 0.13583333333333333,
+      "run9_deduction_to_income": 0.13583333333333333,
+      "match": true
+    }
+  ]
+}

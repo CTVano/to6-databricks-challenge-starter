@@ -544,63 +544,96 @@ for name, frame in [(FEATURES_TABLE, saved_features), *split_frames.items()]:
     print(f"exported {export_dir}/{fname} and outputs/{fname}")
 run_record["export_sha256"] = export_sha256
 
+# 4b) The same exports as JSON, at the top level of outputs/ (no subfolders):
+#     the latest copy outputs/<table>.json and this run's snapshot
+#     outputs/run-<n>-<table>.json. A snapshot holds only the table data, so two
+#     identical runs produce byte-identical files.
+EXPORT_COLUMNS = ["return_id", "tax_year", "deduction_to_income"]
+json_exports, json_sha256 = {}, {}
+for name, frame in [(FEATURES_TABLE, saved_features), *split_frames.items()]:
+    short = name.split(".")[-1]
+    data_rows = rows(frame)
+    payload = {
+        "table": name,
+        "columns": EXPORT_COLUMNS,
+        "row_count": len(data_rows),
+        "rows": [dict(zip(EXPORT_COLUMNS, r)) for r in data_rows],
+    }
+    text = json.dumps(payload, indent=2) + "\n"
+    snapshot = f"outputs/run-{run_number}-{short}.json"
+    (repo_root / snapshot).write_text(text, encoding="utf-8")
+    (repo_root / "outputs" / f"{short}.json").write_text(text, encoding="utf-8")
+    json_exports[short] = snapshot
+    json_sha256[short] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    print(f"exported {snapshot} and outputs/{short}.json")
+run_record["json_exports"] = json_exports
+run_record["json_sha256"] = json_sha256
+
 # 5) Compare this run with the previous COMPLETE run, using the committed export
 #    files themselves: row-by-row values and a SHA-256 checksum per file.
+#    The comparison reads the committed JSON snapshots outputs/run-<n>-<table>.json
+#    and is saved as both outputs/run-comparison.json and outputs/run-comparison.csv.
 comparison_path = repo_root / "outputs" / "run-comparison.csv"
+comparison_json_path = repo_root / "outputs" / "run-comparison.json"
 previous = next((r for r in reversed(runs)
-                 if r.get("status") == "complete" and r.get("export_dir")), None)
+                 if r.get("status") == "complete" and r.get("json_exports")), None)
 runs_match = None
 checksum_lines = ""
 if previous:
     p, n = previous["run_number"], run_number
-    prev_dir = repo_root / previous["export_dir"]
     comparison_rows = []
     checksums_identical = {}
-    for fname in export_sha256:
-        a = pd.read_csv(prev_dir / fname, dtype={"return_id": str})
-        b = pd.read_csv(run_dir / fname, dtype={"return_id": str})
-        merged = a.merge(b, on="return_id", how="outer", suffixes=(f"_run{p}", f"_run{n}"),
-                         indicator=True)
-        for _, r in merged.sort_values("return_id").iterrows():
-            va, vb = r[f"deduction_to_income_run{p}"], r[f"deduction_to_income_run{n}"]
-            same_value = (pd.isna(va) and pd.isna(vb)) or va == vb
+    for short in json_exports:
+        a = json.loads((repo_root / previous["json_exports"][short]).read_text(encoding="utf-8"))
+        b = json.loads((repo_root / json_exports[short]).read_text(encoding="utf-8"))
+        rows_a = {r["return_id"]: r for r in a["rows"]}
+        rows_b = {r["return_id"]: r for r in b["rows"]}
+        for rid in sorted(set(rows_a) | set(rows_b)):
+            x, y = rows_a.get(rid), rows_b.get(rid)
             comparison_rows.append({
-                "export_file": fname,
-                "return_id": r["return_id"],
-                f"run{p}_tax_year": r[f"tax_year_run{p}"],
-                f"run{n}_tax_year": r[f"tax_year_run{n}"],
-                f"run{p}_deduction_to_income": va,
-                f"run{n}_deduction_to_income": vb,
-                "match": bool(r["_merge"] == "both"
-                              and r[f"tax_year_run{p}"] == r[f"tax_year_run{n}"] and same_value),
+                "export_file": f"{short}.json",
+                "return_id": rid,
+                f"run{p}_tax_year": x["tax_year"] if x else None,
+                f"run{n}_tax_year": y["tax_year"] if y else None,
+                f"run{p}_deduction_to_income": x["deduction_to_income"] if x else None,
+                f"run{n}_deduction_to_income": y["deduction_to_income"] if y else None,
+                "match": x is not None and x == y,
             })
-        checksums_identical[fname] = previous["export_sha256"][fname] == export_sha256[fname]
+        checksums_identical[f"{short}.json"] = previous["json_sha256"][short] == json_sha256[short]
     comparison_df = pd.DataFrame(comparison_rows)
     comparison_df.to_csv(comparison_path, index=False)
     display(comparison_df)
-    rows_matching = int(comparison_df["match"].sum())
-    runs_match = rows_matching == len(comparison_df) and all(checksums_identical.values())
+    rows_matching = sum(r["match"] for r in comparison_rows)
+    runs_match = rows_matching == len(comparison_rows) and all(checksums_identical.values())
     run_record["comparison"] = {
         "compared_with_run": p,
-        "source": f"{previous['export_dir']}/*.csv vs {export_dir}/*.csv",
-        "rows_compared": len(comparison_df),
+        "run_a": {"run_number": p, "timestamp_utc": previous["timestamp_utc"],
+                  "notebook_url": previous["notebook_url"], "files": previous["json_exports"]},
+        "run_b": {"run_number": n, "timestamp_utc": run_record["timestamp_utc"],
+                  "notebook_url": run_record["notebook_url"], "files": json_exports},
+        "rows_compared": len(comparison_rows),
         "rows_matching": rows_matching,
         "checksums_identical": checksums_identical,
         "result": "identical" if runs_match else "different",
     }
+    comparison_json_path.write_text(
+        json.dumps({"summary": run_record["comparison"], "rows": comparison_rows}, indent=2) + "\n",
+        encoding="utf-8",
+    )
     summary_line = (
         f"run {p} ({previous['timestamp_utc']}) vs run {n} ({run_record['timestamp_utc']}), "
-        f"compared from the export files `{previous['export_dir']}/` and `{export_dir}/`: "
-        f"{rows_matching}/{len(comparison_df)} rows match and "
+        f"compared from the committed JSON snapshots `outputs/run-{p}-*.json` and "
+        f"`outputs/run-{n}-*.json`: {rows_matching}/{len(comparison_rows)} rows match and "
         f"{sum(checksums_identical.values())}/{len(checksums_identical)} files have identical "
         f"SHA-256 checksums -> "
         + ("IDENTICAL return IDs and values" if runs_match else "DIFFERENT — investigate")
     )
     checksum_lines = "\n".join(
-        ["| Export file | Run " + str(p) + " SHA-256 | Run " + str(n) + " SHA-256 | Identical |",
-         "| --- | --- | --- | --- |"]
-        + [f"| `{f}` | `{previous['export_sha256'][f][:16]}…` | `{export_sha256[f][:16]}…` | "
-           f"{'yes' if checksums_identical[f] else 'NO'} |" for f in export_sha256]
+        [f"| Table | Run {p} snapshot | Run {n} snapshot | Run {p} SHA-256 | Run {n} SHA-256 | Identical |",
+         "| --- | --- | --- | --- | --- | --- |"]
+        + [f"| `{s}` | `{previous['json_exports'][s]}` | `{json_exports[s]}` | "
+           f"`{previous['json_sha256'][s][:16]}…` | `{json_sha256[s][:16]}…` | "
+           f"{'yes' if checksums_identical[s + '.json'] else 'NO'} |" for s in json_exports]
     )
 else:
     summary_line = ("first run with per-run export snapshots; rerun all stages to compare "
@@ -639,7 +672,7 @@ feature_values_table = "\n".join(
 split_lines = "\n".join(
     f"- `{t}`: {len(run_record['tables'][t])} returns "
     f"({', '.join(r[0] for r in run_record['tables'][t])}) — "
-    f"`outputs/{t.split('.')[-1]}.csv`"
+    f"`outputs/{t.split('.')[-1]}.json`"
     for t in YEAR_TABLES.values()
 )
 compared_runs = ([previous] if previous else []) + [run_record]
@@ -649,11 +682,14 @@ run_lines = "\n".join(
      f"REJECTED — {rejection_reference['affected_record_count']} affected records | "
      f"`outputs/initial-rejection-evidence.json` |"]
     + [f"| Complete successful run {r['run_number']} | {r['timestamp_utc']} | {r['notebook_url']} | "
-       f"all stages succeeded | `{r['export_dir']}/` |" for r in compared_runs]
+       f"all stages succeeded | `outputs/run-{r['run_number']}-*.json` |" for r in compared_runs]
 )
+compared_numbers = {r["run_number"] for r in compared_runs}
 earlier_lines = "\n".join(
-    f"- Run {r['run_number']} ({r['timestamp_utc']}): {r.get('note', r.get('status'))}"
-    for r in runs if r.get("export_dir") is None
+    f"- Run {r['run_number']} ({r['timestamp_utc']}): "
+    + r.get("note", f"complete run of an earlier notebook version (CSV snapshots only, "
+                    f"`{r.get('export_dir')}/`)")
+    for r in runs if r["run_number"] not in compared_numbers
 )
 
 submission = f"""# Handoff — checked feature dataset (to6 challenge 3)
@@ -684,9 +720,9 @@ submission = f"""# Handoff — checked feature dataset (to6 challenge 3)
   nonzero ratio verified against the source (R01: 20/100 = 0.2); zero-income returns
   (R03, R09) present with null ratios; saved table read back from the Catalog.
 - Stage 4 — every accepted return in exactly one year table, in its assigned year;
-  each complete run exports its tables to its own folder `outputs/runs/run-<n>/`, and the
-  two complete runs are compared from those committed files (row by row and by SHA-256
-  checksum); tables are overwritten each run (no appended copies).
+  each complete run exports its tables as JSON snapshots `outputs/run-<n>-<table>.json`, and
+  the two complete runs are compared from those committed files (row by row and by SHA-256
+  checksum, `outputs/run-comparison.json`); tables are overwritten each run (no appended copies).
 
 ## Results
 
@@ -706,19 +742,21 @@ Affected initial records:
 {rejection_table}
 
 ### Stage 3 — `return_features` readback
-Source file: `outputs/return_features.csv` (same content as `{export_dir}/return_features.csv`)
+Source file: `outputs/return_features.json` (this run's snapshot: `{json_exports['return_features']}`;
+CSV copy: `outputs/return_features.csv`)
 
 - {saved_features.count()} returns, one row each; columns exactly `return_id, tax_year, deduction_to_income`
 - Nonzero check: {check_id} = {src['deduction']} / {src['income']} = {expected_ratio} (saved value matches)
 - Zero-income returns kept with null ratio: {', '.join(zero_income_ids)}
 
-Saved values (as exported):
+Saved values, exactly as in `outputs/return_features.json`:
 
 {feature_values_table}
 
 ### Stage 4 — year split and repeat runs
-Source files: `outputs/features_train.csv`, `outputs/features_validation.csv`,
-`outputs/features_test.csv`; comparison in `outputs/run-comparison.csv`
+Source files: `outputs/features_train.json`, `outputs/features_validation.json`,
+`outputs/features_test.json`; comparison in `outputs/run-comparison.json`
+(CSV copies with the same names and `.csv`)
 
 {split_lines}
 
@@ -742,11 +780,12 @@ complete runs above are compared. Earlier records in that file are labelled and 
 - `SUBMISSION.md` — this handoff
 - `outputs/input-profile.json` — Stage 1 full-batch profile of both batches and lineage
 - `outputs/initial-rejection-evidence.json` — rejection run reference, rejected records and reasons
-- `outputs/return_features.csv`, `outputs/features_train.csv`,
-  `outputs/features_validation.csv`, `outputs/features_test.csv` — latest exports
-- `outputs/runs/run-{previous['run_number'] if previous else run_number}/` and `{export_dir}/` — the same four exports
-  from each of the two compared complete runs
-- `outputs/run-comparison.csv` — row-by-row comparison of the two runs' export files
+- `outputs/return_features.json`, `outputs/features_train.json`,
+  `outputs/features_validation.json`, `outputs/features_test.json` — latest exports (JSON)
+- `outputs/run-{previous['run_number'] if previous else run_number}-<table>.json` and `outputs/run-{run_number}-<table>.json` —
+  snapshots of the same four tables from each of the two compared complete runs
+- `outputs/run-comparison.json` — summary and row-by-row comparison of the two runs' snapshot files
+- CSV copies: `outputs/<table>.csv`, `outputs/runs/run-<n>/<table>.csv`, `outputs/run-comparison.csv`
 - `outputs/run-evidence.json` — every run's timestamp, notebook URL, status, IDs, values and checksums
 
 ## Could not verify

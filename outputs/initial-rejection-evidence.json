@@ -1,6 +1,6 @@
 {
   "rejection_run": {
-    "timestamp_utc": "2026-11-20T19:25:46.154097+00:00",
+    "timestamp_utc": "2026-11-20T19:43:59.005369+00:00",
     "notebook_url": "https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542",
     "notebook_path": "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook",
     "stage": "Stage 2: Completeness and uniqueness checks (batch decision)",

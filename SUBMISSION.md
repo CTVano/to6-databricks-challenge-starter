@@ -26,9 +26,9 @@
   nonzero ratio verified against the source (R01: 20/100 = 0.2); zero-income returns
   (R03, R09) present with null ratios; saved table read back from the Catalog.
 - Stage 4 — every accepted return in exactly one year table, in its assigned year;
-  each complete run exports its tables to its own folder `outputs/runs/run-<n>/`, and the
-  two complete runs are compared from those committed files (row by row and by SHA-256
-  checksum); tables are overwritten each run (no appended copies).
+  each complete run exports its tables as JSON snapshots `outputs/run-<n>-<table>.json`, and
+  the two complete runs are compared from those committed files (row by row and by SHA-256
+  checksum, `outputs/run-comparison.json`); tables are overwritten each run (no appended copies).
 
 ## Results
 
@@ -55,13 +55,14 @@ Affected initial records:
 | R02 | 2022 | null | 33 | missing required value: income |
 
 ### Stage 3 — `return_features` readback
-Source file: `outputs/return_features.csv` (same content as `outputs/runs/run-7/return_features.csv`)
+Source file: `outputs/return_features.json` (this run's snapshot: `outputs/run-9-return_features.json`;
+CSV copy: `outputs/return_features.csv`)
 
 - 12 returns, one row each; columns exactly `return_id, tax_year, deduction_to_income`
 - Nonzero check: R01 = 20 / 100 = 0.2 (saved value matches)
 - Zero-income returns kept with null ratio: R03, R09
 
-Saved values (as exported):
+Saved values, exactly as in `outputs/return_features.json`:
 
 | return_id | tax_year | deduction_to_income | Year table |
 | --- | --- | --- | --- |
@@ -79,29 +80,30 @@ Saved values (as exported):
 | R12 | 2024 | 0.13583333333333333 | `features_test` |
 
 ### Stage 4 — year split and repeat runs
-Source files: `outputs/features_train.csv`, `outputs/features_validation.csv`,
-`outputs/features_test.csv`; comparison in `outputs/run-comparison.csv`
+Source files: `outputs/features_train.json`, `outputs/features_validation.json`,
+`outputs/features_test.json`; comparison in `outputs/run-comparison.json`
+(CSV copies with the same names and `.csv`)
 
-- `training.to6_c3_562d757e9b79.features_train`: 4 returns (R01, R02, R03, R04) — `outputs/features_train.csv`
-- `training.to6_c3_562d757e9b79.features_validation`: 4 returns (R05, R06, R07, R08) — `outputs/features_validation.csv`
-- `training.to6_c3_562d757e9b79.features_test`: 4 returns (R09, R10, R11, R12) — `outputs/features_test.csv`
+- `training.to6_c3_562d757e9b79.features_train`: 4 returns (R01, R02, R03, R04) — `outputs/features_train.json`
+- `training.to6_c3_562d757e9b79.features_validation`: 4 returns (R05, R06, R07, R08) — `outputs/features_validation.json`
+- `training.to6_c3_562d757e9b79.features_test`: 4 returns (R09, R10, R11, R12) — `outputs/features_test.json`
 
-**Repeat-run result:** run 6 (2026-11-20T19:24:36.340055+00:00) vs run 7 (2026-11-20T19:26:16.607638+00:00), compared from the export files `outputs/runs/run-6/` and `outputs/runs/run-7/`: 24/24 rows match and 4/4 files have identical SHA-256 checksums -> IDENTICAL return IDs and values
+**Repeat-run result:** run 8 (2026-11-20T19:42:52.706498+00:00) vs run 9 (2026-11-20T19:44:29.115444+00:00), compared from the committed JSON snapshots `outputs/run-8-*.json` and `outputs/run-9-*.json`: 24/24 rows match and 4/4 files have identical SHA-256 checksums -> IDENTICAL return IDs and values
 
-| Export file | Run 6 SHA-256 | Run 7 SHA-256 | Identical |
-| --- | --- | --- | --- |
-| `return_features.csv` | `382f97d69814056f…` | `382f97d69814056f…` | yes |
-| `features_train.csv` | `85edc0fe84a53438…` | `85edc0fe84a53438…` | yes |
-| `features_validation.csv` | `4f997086def1a1c9…` | `4f997086def1a1c9…` | yes |
-| `features_test.csv` | `f133daffb5d300f2…` | `f133daffb5d300f2…` | yes |
+| Table | Run 8 snapshot | Run 9 snapshot | Run 8 SHA-256 | Run 9 SHA-256 | Identical |
+| --- | --- | --- | --- | --- | --- |
+| `return_features` | `outputs/run-8-return_features.json` | `outputs/run-9-return_features.json` | `0ad2463107f0a3a3…` | `0ad2463107f0a3a3…` | yes |
+| `features_train` | `outputs/run-8-features_train.json` | `outputs/run-9-features_train.json` | `8c5b8e05cefe4931…` | `8c5b8e05cefe4931…` | yes |
+| `features_validation` | `outputs/run-8-features_validation.json` | `outputs/run-9-features_validation.json` | `408bbeb454d144f2…` | `408bbeb454d144f2…` | yes |
+| `features_test` | `outputs/run-8-features_test.json` | `outputs/run-9-features_test.json` | `9a666bfa45cce406…` | `9a666bfa45cce406…` | yes |
 
 ## Run references
 
 | Run | Timestamp (UTC) | Notebook | Result | Evidence file |
 | --- | --- | --- | --- | --- |
-| Rejection of `training.to6_challenge3_inputs.returns_initial` (Stage 2, run 7) | 2026-11-20T19:25:46.154097+00:00 | https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542 | REJECTED — 3 affected records | `outputs/initial-rejection-evidence.json` |
-| Complete successful run 6 | 2026-11-20T19:24:36.340055+00:00 | https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542 | all stages succeeded | `outputs/runs/run-6/` |
-| Complete successful run 7 | 2026-11-20T19:26:16.607638+00:00 | https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542 | all stages succeeded | `outputs/runs/run-7/` |
+| Rejection of `training.to6_challenge3_inputs.returns_initial` (Stage 2, run 9) | 2026-11-20T19:43:59.005369+00:00 | https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542 | REJECTED — 3 affected records | `outputs/initial-rejection-evidence.json` |
+| Complete successful run 8 | 2026-11-20T19:42:52.706498+00:00 | https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542 | all stages succeeded | `outputs/run-8-*.json` |
+| Complete successful run 9 | 2026-11-20T19:44:29.115444+00:00 | https://dbc-48a16403-f66f.cloud.databricks.com/editor/notebooks/127024866557542 | all stages succeeded | `outputs/run-9-*.json` |
 
 All runs, with their actual IDs and values, are in `outputs/run-evidence.json`. Only the two
 complete runs above are compared. Earlier records in that file are labelled and not used:
@@ -111,17 +113,20 @@ complete runs above are compared. Earlier records in that file are labelled and 
 - Run 3 (2026-11-20T18:54:49.577970+00:00): failed: Stage 4 raised KeyError after this record was written; not a complete run
 - Run 4 (2026-11-20T18:56:21.338658+00:00): superseded: complete run of an earlier notebook version, before per-run export snapshots
 - Run 5 (2026-11-20T18:57:53.426139+00:00): superseded: complete run of an earlier notebook version, before per-run export snapshots
+- Run 6 (2026-11-20T19:24:36.340055+00:00): complete run of an earlier notebook version (CSV snapshots only, `outputs/runs/run-6/`)
+- Run 7 (2026-11-20T19:26:16.607638+00:00): complete run of an earlier notebook version (CSV snapshots only, `outputs/runs/run-7/`)
 
 ## Final exports (this Databricks Git folder)
 - `notebook.py` — notebook source
 - `SUBMISSION.md` — this handoff
 - `outputs/input-profile.json` — Stage 1 full-batch profile of both batches and lineage
 - `outputs/initial-rejection-evidence.json` — rejection run reference, rejected records and reasons
-- `outputs/return_features.csv`, `outputs/features_train.csv`,
-  `outputs/features_validation.csv`, `outputs/features_test.csv` — latest exports
-- `outputs/runs/run-6/` and `outputs/runs/run-7/` — the same four exports
-  from each of the two compared complete runs
-- `outputs/run-comparison.csv` — row-by-row comparison of the two runs' export files
+- `outputs/return_features.json`, `outputs/features_train.json`,
+  `outputs/features_validation.json`, `outputs/features_test.json` — latest exports (JSON)
+- `outputs/run-8-<table>.json` and `outputs/run-9-<table>.json` —
+  snapshots of the same four tables from each of the two compared complete runs
+- `outputs/run-comparison.json` — summary and row-by-row comparison of the two runs' snapshot files
+- CSV copies: `outputs/<table>.csv`, `outputs/runs/run-<n>/<table>.csv`, `outputs/run-comparison.csv`
 - `outputs/run-evidence.json` — every run's timestamp, notebook URL, status, IDs, values and checksums
 
 ## Could not verify
