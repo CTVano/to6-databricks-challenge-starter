@@ -21,6 +21,11 @@ print({"input_schema": INPUT_SCHEMA, "output_schema": OUTPUT_SCHEMA})
 
 # COMMAND ----------
 
+# MAGIC %sql
+# MAGIC SELECT 1 AS connection_check
+
+# COMMAND ----------
+
 from pathlib import Path
 import json
 
@@ -43,6 +48,51 @@ assert practice_result == {"connection_check": 1}
 # COMMAND ----------
 
 # Your investigation here.
+Schema: to6_challenge3_inputs
+  Description: Synthetic data that includes parsed source data, return data, and source lineage data
+  Tables:
+      returns_initial
+        Description: Initial synthetic delivery from parsed_source; known delivery defects. Validate before feature output.
+
+      returns_corrected
+        Description: Corrected synthetic delivery from parsed_source; one row per return. Validate required values and return_id uniqueness.
+
+      source_lineage
+        Description: Source data lineage
+
+      parsed_source
+        Description: Synthetic parsed source: one row is one return; return_id identifies the return, taxpayer_id identifies a filer who may recur across years. Nonnegative amounts; zero income is valid.
+
+Returns_Initial Sample Data Rows:
+return_id	taxpayer_id	tax_year	income	deduction
+R01	F0	2022	100	20
+R01	F0	2022	100	20
+R02	F1	2022	null	33
+R03	F2	2022	0	46
+R04	F3	2022	400	59
+R05	F0	2023	500	72
+R06	F1	2023	600	85
+R07	F2	2023	700	98
+R08	F3	2023	800	111
+R09	F0	2024	0	124
+R10	F1	2024	1000	137
+R11	F2	2024	1100	150
+R12	F3	2024	1200	163
+
+Returns_Corrected Sample Rows:
+    return_id	taxpayer_id	    tax_year	income	    deduction
+    R01	        F0	            2022	    100	        20
+    R02	        F1	            2022	    200	        33
+    R03	        F2	            2022	    0	          46
+
+Lineage:
+  Returns_initial comes from parsed_source and returns_initial from to6_inputs_20261115
+  Returns_corrected comes from to6_inputs_20261115 and to6_challenge3_inputs
+
+Returns_initial has more data than corrected so some cleanup happened possibly due to duplicates
+Returns_initial has duplicate return_id of 01 that was corrected in returns_corrected
+Returns_initial has income as nulls instead of 0 that need to be corrected in returns_corrected
+Returns_initial and returns_corrected has tax year distribution of 2022 to 2024
 
 # COMMAND ----------
 
