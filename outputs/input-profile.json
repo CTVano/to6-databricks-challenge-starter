@@ -1,0 +1,106 @@
+{
+  "lineage": [
+    {
+      "delivered_table": "training.to6_challenge3_inputs.returns_initial",
+      "upstream_table": "training.to6_challenge3_inputs.parsed_source",
+      "relationship": "Synthetic initial delivery transformation; validation required"
+    },
+    {
+      "delivered_table": "training.to6_challenge3_inputs.returns_corrected",
+      "upstream_table": "training.to6_challenge3_inputs.parsed_source",
+      "relationship": "Synthetic corrected delivery; same validation rules"
+    }
+  ],
+  "catalog_comments": {
+    "training.to6_challenge3_inputs.returns_initial": "Initial synthetic delivery from parsed_source; known delivery defects. Validate before feature output.",
+    "training.to6_challenge3_inputs.returns_corrected": "Corrected synthetic delivery from parsed_source; one row per return. Validate required values and return_id uniqueness.",
+    "training.to6_challenge3_inputs.parsed_source": "Synthetic parsed source: one row is one return; return_id identifies the return, taxpayer_id identifies a filer who may recur across years. Nonnegative amounts; zero income is valid."
+  },
+  "profiles": [
+    {
+      "table": "training.to6_challenge3_inputs.returns_initial",
+      "catalog_comment": "Initial synthetic delivery from parsed_source; known delivery defects. Validate before feature output.",
+      "total_rows": 13,
+      "distinct_return_ids": 12,
+      "returns_by_year": [
+        {
+          "tax_year": 2022,
+          "rows": 5,
+          "distinct_return_ids": 4
+        },
+        {
+          "tax_year": 2023,
+          "rows": 4,
+          "distinct_return_ids": 4
+        },
+        {
+          "tax_year": 2024,
+          "rows": 4,
+          "distinct_return_ids": 4
+        }
+      ],
+      "missing_required_values": {
+        "return_id": 0,
+        "tax_year": 0,
+        "income": 1,
+        "deduction": 0
+      },
+      "records_with_missing_required_values": [
+        {
+          "return_id": "R02",
+          "taxpayer_id": "F1",
+          "tax_year": 2022,
+          "income": null,
+          "deduction": 33
+        }
+      ],
+      "duplicate_return_ids": [
+        {
+          "return_id": "R01",
+          "occurrences": 2
+        }
+      ],
+      "zero_income_return_ids": [
+        "R03",
+        "R09"
+      ],
+      "negative_amount_records": 0
+    },
+    {
+      "table": "training.to6_challenge3_inputs.returns_corrected",
+      "catalog_comment": "Corrected synthetic delivery from parsed_source; one row per return. Validate required values and return_id uniqueness.",
+      "total_rows": 12,
+      "distinct_return_ids": 12,
+      "returns_by_year": [
+        {
+          "tax_year": 2022,
+          "rows": 4,
+          "distinct_return_ids": 4
+        },
+        {
+          "tax_year": 2023,
+          "rows": 4,
+          "distinct_return_ids": 4
+        },
+        {
+          "tax_year": 2024,
+          "rows": 4,
+          "distinct_return_ids": 4
+        }
+      ],
+      "missing_required_values": {
+        "return_id": 0,
+        "tax_year": 0,
+        "income": 0,
+        "deduction": 0
+      },
+      "records_with_missing_required_values": [],
+      "duplicate_return_ids": [],
+      "zero_income_return_ids": [
+        "R03",
+        "R09"
+      ],
+      "negative_amount_records": 0
+    }
+  ]
+}

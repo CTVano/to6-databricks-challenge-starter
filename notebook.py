@@ -47,6 +47,7 @@ assert practice_result == {"connection_check": 1}
 
 # COMMAND ----------
 
+# DBTITLE 1,Stage 1: Source references and full-batch profile
 # Your investigation here.
 #Schema: to6_challenge3_inputs
 #  Description: Synthetic data that includes parsed source data, return data, and source lineage data
@@ -93,6 +94,108 @@ assert practice_result == {"connection_check": 1}
 #Returns_initial has duplicate return_id of 01 that was corrected in returns_corrected
 #Returns_initial has income as nulls instead of 0 that need to be corrected in returns_corrected
 #Returns_initial and returns_corrected has tax year distribution of 2022 to 2024
+
+# ---------------------------------------------------------------------------
+# Stage 1 — Full-batch profile (queries + results kept in the notebook and in
+# outputs/input-profile.json). Observations only; the quality checks that
+# decide which batch is usable are in stage 2.
+# ---------------------------------------------------------------------------
+from pyspark.sql import functions as F
+import json
+
+PROFILE_REQUIRED = ["return_id", "tax_year", "income", "deduction"]
+
+# Source references: supplied lineage view and Catalog table comments
+lineage = spark.table(LINEAGE_VIEW)
+display(lineage)
+table_comments = {
+    t: spark.sql(f"DESCRIBE TABLE EXTENDED {t}")
+        .where(F.col("col_name") == "Comment").select("data_type").first()["data_type"]
+    for t in [INITIAL_TABLE, CORRECTED_TABLE, f"{INPUT_SCHEMA}.parsed_source"]
+}
+
+# At least three sample rows of each batch
+for t in [INITIAL_TABLE, CORRECTED_TABLE]:
+    print(f"sample rows: {t}")
+    display(spark.table(t).orderBy("return_id").limit(3))
+
+
+def profile_batch(table_name):
+    """Summarize the FULL batch: returns by year, missing required values,
+    duplicate return IDs and zero-income records."""
+    df = spark.table(table_name)
+    by_year = (df.groupBy("tax_year")
+                 .agg(F.count("*").alias("rows"),
+                      F.countDistinct("return_id").alias("distinct_return_ids"))
+                 .orderBy("tax_year"))
+    missing = df.select([F.sum(F.col(c).isNull().cast("int")).alias(c) for c in PROFILE_REQUIRED])
+    duplicates = (df.groupBy("return_id").count().where(F.col("count") > 1)
+                    .withColumnRenamed("count", "occurrences").orderBy("return_id"))
+    zero_income = df.where(F.col("income") == 0).orderBy("return_id")
+    negative_amounts = df.where((F.col("income") < 0) | (F.col("deduction") < 0)).count()
+
+    print(f"===== {table_name}: {df.count()} rows, "
+          f"{df.select('return_id').distinct().count()} distinct return_id =====")
+    print("returns by year"); display(by_year)
+    print("missing required values (null count per column)"); display(missing)
+    print("duplicate return IDs"); display(duplicates)
+    print("zero-income records (valid data)"); display(zero_income)
+    print(f"records with a negative income or deduction: {negative_amounts}")
+
+    return {
+        "table": table_name,
+        "catalog_comment": table_comments.get(table_name),
+        "total_rows": df.count(),
+        "distinct_return_ids": df.select("return_id").distinct().count(),
+        "returns_by_year": [r.asDict() for r in by_year.collect()],
+        "missing_required_values": missing.first().asDict(),
+        "records_with_missing_required_values": [
+            r.asDict() for r in df.where(" OR ".join(f"{c} IS NULL" for c in PROFILE_REQUIRED))
+                                  .orderBy("return_id").collect()],
+        "duplicate_return_ids": [r.asDict() for r in duplicates.collect()],
+        "zero_income_return_ids": [r["return_id"] for r in zero_income.collect()],
+        "negative_amount_records": negative_amounts,
+    }
+
+
+profiles = [profile_batch(INITIAL_TABLE), profile_batch(CORRECTED_TABLE)]
+
+# Side-by-side overview of both batches
+display(spark.createDataFrame(
+    [(p["table"], p["total_rows"], p["distinct_return_ids"],
+      sum(p["missing_required_values"].values()), len(p["duplicate_return_ids"]),
+      len(p["zero_income_return_ids"])) for p in profiles],
+    "table STRING, total_rows INT, distinct_return_ids INT, missing_required_values INT, "
+    "duplicated_return_ids INT, zero_income_records INT",
+))
+
+# Persist the profile so a reviewer can see the results outside the notebook
+(repo_root / "outputs").mkdir(exist_ok=True)
+(repo_root / "outputs" / "input-profile.json").write_text(
+    json.dumps({"lineage": [r.asDict() for r in lineage.collect()],
+                "catalog_comments": table_comments, "profiles": profiles},
+               indent=2, default=str) + "\n",
+    encoding="utf-8",
+)
+print("wrote outputs/input-profile.json")
+
+# COMMAND ----------
+
+# DBTITLE 1,Stage 1: Findings that shape the next steps
+# MAGIC %md
+# MAGIC ### Stage 1 findings and how they affect the next steps
+# MAGIC **Source reference:** both deliveries come from `training.to6_challenge3_inputs.parsed_source` (supplied `source_lineage` view). One row is one return; `return_id` is the uniqueness identifier; `taxpayer_id` is the filer and may recur across years.
+# MAGIC
+# MAGIC | Finding (full batch, see profile above and `outputs/input-profile.json`) | Effect on the next stage |
+# MAGIC | --- | --- |
+# MAGIC | `returns_initial`: 13 rows but 12 distinct `return_id`; R01 occurs twice | Stage 2 uniqueness check on `return_id` must reject this batch and keep both R01 rows as evidence |
+# MAGIC | `returns_initial`: R02 has a null `income` (a required value) | Stage 2 completeness check must reject it; the null is **not** replaced with 0 |
+# MAGIC | `returns_corrected`: 12 rows, 12 distinct IDs, no missing required values | Expected to pass the same Stage 2 rules and become the batch for the final run |
+# MAGIC | Zero income in R03 (2022) and R09 (2024); zero income is valid | Stage 3 keeps these returns with a null `deduction_to_income` instead of dividing by zero |
+# MAGIC | 4 returns per year for 2022, 2023, 2024 | Stage 4 split: train = 2022, validation = 2023, test = 2024; every year is covered |
+# MAGIC | No negative income or deduction values | Consistent with the Catalog's nonnegative-amounts statement |
+# MAGIC
+# MAGIC These observations do not replace the Stage 2 quality checks.
 
 # COMMAND ----------
 
@@ -365,9 +468,14 @@ try:
 except Exception:
     workspace_url = None
 notebook_path = "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook"
+NOTEBOOK_ID = "127024866557542"  # workspace object id of this notebook
 run_record = {
+    "run_number": None,  # filled in below
     "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-    "notebook_url": f"{workspace_url}{notebook_path}" if workspace_url else notebook_path,
+    "notebook_url": (f"https://{workspace_url}/editor/notebooks/{NOTEBOOK_ID}"
+                     if workspace_url else notebook_path),
+    "notebook_path": notebook_path,
+    "stages_run": "all stages (Run all): profile, batch decision, return_features, year split",
     "tables": {
         FEATURES_TABLE: rows(saved_features),
         **{table: rows(frame) for table, frame in split_frames.items()},
@@ -375,14 +483,50 @@ run_record = {
 }
 evidence_path = repo_root / "outputs" / "run-evidence.json"
 runs = json.loads(evidence_path.read_text(encoding="utf-8")) if evidence_path.exists() else []
+for i, earlier in enumerate(runs, start=1):  # older records were saved before run numbers existed
+    earlier.setdefault("run_number", i)
+run_record["run_number"] = len(runs) + 1
 runs.append(run_record)
 evidence_path.write_text(json.dumps(runs, indent=2) + "\n", encoding="utf-8")
+
+# 3b) Side-by-side comparison of the latest two complete runs, row by row
+comparison_path = repo_root / "outputs" / "run-comparison.csv"
+runs_match = None
 if len(runs) >= 2:
-    same = runs[-1]["tables"] == runs[-2]["tables"]
-    print("comparison of the latest two complete runs: "
-          + ("identical return IDs and values" if same else "DIFFERENT — investigate"))
+    run_a, run_b = runs[-2], runs[-1]
+    comparison_rows = []
+    for table in sorted(set(run_a["tables"]) | set(run_b["tables"])):
+        a = {r[0]: r for r in run_a["tables"].get(table, [])}
+        b = {r[0]: r for r in run_b["tables"].get(table, [])}
+        for rid in sorted(set(a) | set(b)):
+            ra, rb = a.get(rid), b.get(rid)
+            comparison_rows.append({
+                "table": table,
+                "return_id": rid,
+                f"run{run_a['run_number']}_tax_year": ra[1] if ra else None,
+                f"run{run_b['run_number']}_tax_year": rb[1] if rb else None,
+                f"run{run_a['run_number']}_deduction_to_income": ra[2] if ra else None,
+                f"run{run_b['run_number']}_deduction_to_income": rb[2] if rb else None,
+                "match": ra == rb,
+            })
+    # equal row counts per table as well (no appended copies)
+    counts_match = all(len(run_a["tables"][t]) == len(run_b["tables"].get(t, []))
+                       for t in run_a["tables"])
+    runs_match = counts_match and all(r["match"] for r in comparison_rows)
+    import pandas as pd
+    comparison_df = pd.DataFrame(comparison_rows)
+    comparison_df.to_csv(comparison_path, index=False)
+    display(comparison_df)
+    summary_line = (
+        f"run {run_a['run_number']} ({run_a['timestamp_utc']}) vs run {run_b['run_number']} "
+        f"({run_b['timestamp_utc']}): {sum(r['match'] for r in comparison_rows)}/"
+        f"{len(comparison_rows)} rows match across {len(run_a['tables'])} tables -> "
+        + ("IDENTICAL return IDs and values" if runs_match else "DIFFERENT — investigate")
+    )
+    print(summary_line)
 else:
-    print("first recorded run; rerun all stages to compare two complete successful runs")
+    summary_line = "first recorded run; rerun all stages to compare two complete successful runs"
+    print(summary_line)
 
 # 4) Small synthetic exports of the saved tables
 for name, frame in [(FEATURES_TABLE, saved_features), *split_frames.items()]:
@@ -390,7 +534,36 @@ for name, frame in [(FEATURES_TABLE, saved_features), *split_frames.items()]:
     frame.orderBy("return_id").toPandas().to_csv(export_path, index=False)
     print(f"exported {export_path.name}")
 
-# 5) Handoff: SUBMISSION.md
+# 5) Handoff: SUBMISSION.md — built from this run's actual results
+def _profile_line(p):
+    years = ", ".join(f"{y['tax_year']}: {y['rows']}" for y in p["returns_by_year"])
+    missing = ", ".join(f"{c}={n}" for c, n in p["missing_required_values"].items())
+    dups = ", ".join(f"{d['return_id']} x{d['occurrences']}" for d in p["duplicate_return_ids"]) or "none"
+    zeros = ", ".join(p["zero_income_return_ids"]) or "none"
+    return (f"| `{p['table']}` | {p['total_rows']} | {p['distinct_return_ids']} | {years} | "
+            f"{missing} | {dups} | {zeros} |")
+
+profile_table = "\n".join(
+    ["| Batch | Rows | Distinct return_id | Returns by year | Missing required values | "
+     "Duplicate return_id | Zero-income returns |",
+     "| --- | --- | --- | --- | --- | --- | --- |"]
+    + [_profile_line(p) for p in profiles]
+)
+rejection_table = "\n".join(
+    ["| return_id | tax_year | income | deduction | Reason |", "| --- | --- | --- | --- | --- |"]
+    + [f"| {r['return_id']} | {r['tax_year']} | {r['income']} | {r['deduction']} | "
+       f"{r['rejection_reason']} |" for r in offending_records]
+)
+split_lines = "\n".join(
+    f"- `{t}`: {len(run_record['tables'][t])} returns "
+    f"({', '.join(r[0] for r in run_record['tables'][t])})"
+    for t in YEAR_TABLES.values()
+)
+run_lines = "\n".join(
+    f"- Run {r['run_number']}: {r['timestamp_utc']} — {r['notebook_url']} ({r.get('stages_run', 'all stages')})"
+    for r in runs[-2:]
+)
+
 submission = f"""# Handoff — checked feature dataset (to6 challenge 3)
 
 ## Inputs
@@ -422,19 +595,45 @@ submission = f"""# Handoff — checked feature dataset (to6 challenge 3)
   each run's actual IDs and values recorded in `outputs/run-evidence.json` and the latest
   two complete runs compared; tables are overwritten each run (no appended copies).
 
+## Results
+
+### Stage 1 — full-batch profile (`outputs/input-profile.json`)
+{profile_table}
+
+### Stage 2 — batch decision
+- `{INITIAL_TABLE}`: {initial_rows} rows -> **{initial_decision}**
+- `{CORRECTED_TABLE}`: {corrected_rows} rows -> **{corrected_decision}** (same rules)
+
+Affected initial records (`outputs/initial-rejection-evidence.json`):
+
+{rejection_table}
+
+### Stage 3 — `return_features` readback
+- {saved_features.count()} returns, one row each; columns exactly `return_id, tax_year, deduction_to_income`
+- Nonzero check: {check_id} = {src['deduction']} / {src['income']} = {expected_ratio} (saved value matches)
+- Zero-income returns kept with null ratio: {', '.join(zero_income_ids)}
+
+### Stage 4 — year split and repeat runs
+{split_lines}
+- {summary_line}
+
 ## Run references
-- Per-run timestamps and notebook URL: `outputs/run-evidence.json`.
+{run_lines}
+
+Full per-run IDs and values: `outputs/run-evidence.json`; row-by-row side-by-side
+comparison: `outputs/run-comparison.csv`.
 
 ## Final exports (this Databricks Git folder)
+- `notebook.py` — notebook source
 - `SUBMISSION.md` — this handoff
+- `outputs/input-profile.json` — stage 1 full-batch profile of both batches and lineage
 - `outputs/initial-rejection-evidence.json` — rejected records with reasons
 - `outputs/return_features.csv`, `outputs/features_train.csv`,
   `outputs/features_validation.csv`, `outputs/features_test.csv`
-- `outputs/run-evidence.json` — per-run IDs and values plus the two-run comparison
+- `outputs/run-evidence.json` — per-run timestamps, notebook URL, IDs and values
+- `outputs/run-comparison.csv` — side-by-side comparison of the two complete runs
 
 ## Could not verify
-- Nonnegativity of source amounts is asserted by the Catalog description; not re-checked
-  against the raw values in this run.
 - The supplied `source_lineage` view is the only lineage evidence; its own description
   notes it does not claim a Catalog UI lineage check.
 - Both compared runs executed in this interactive notebook on the attached compute; no
