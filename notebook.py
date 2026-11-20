@@ -215,6 +215,7 @@ print(f"Batch for the final run: {USABLE_TABLE}")
 
 # COMMAND ----------
 
+# DBTITLE 1,Stage 3: Save and verify return_features
 import hashlib
 
 INPUT_SCHEMA = "training.to6_challenge3_inputs"
@@ -223,6 +224,77 @@ CORRECTED_TABLE = f"{INPUT_SCHEMA}.returns_corrected"
 LINEAGE_VIEW = f"{INPUT_SCHEMA}.source_lineage"
 workspace_user = spark.sql("SELECT current_user() AS username").first()["username"]
 OUTPUT_SCHEMA = "training.to6_c3_" + hashlib.sha256(workspace_user.encode("utf-8")).hexdigest()[:12]
+
+# ---------------------------------------------------------------------------
+# Stage 3 — Deliver a checked feature table: return_features
+#
+# Data contract (CHALLENGE.md, outcome 3):
+#   - exactly the columns return_id, tax_year, deduction_to_income
+#   - deduction_to_income = deduction / income; a zero-income return stays in
+#     the table with a null ratio (zero income is valid, the ratio is empty)
+#   - every accepted return kept exactly once; the filer identifier
+#     (taxpayer_id) and the raw amounts (income, deduction) are excluded
+#     under the course's need-to-know rule
+#   - written only from the ACCEPTED batch decided in stage 2
+
+from pyspark.sql import functions as F
+import math
+
+assert "USABLE_TABLE" in globals() and USABLE_TABLE == CORRECTED_TABLE, (
+    "run stage 2 first: features may only be written from an ACCEPTED batch"
+)
+
+accepted = spark.table(USABLE_TABLE)  # returns_corrected: every return exactly once
+
+features = (
+    accepted
+    .withColumn(
+        "deduction_to_income",
+        F.when(F.col("income") > 0, F.col("deduction") / F.col("income")),
+        # income == 0 -> null ratio; the return itself is still kept
+    )
+    .select("return_id", "tax_year", "deduction_to_income")
+)
+
+# Save (overwrite keeps repeat runs identical, with no appended copies)
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {OUTPUT_SCHEMA}")
+FEATURES_TABLE = f"{OUTPUT_SCHEMA}.return_features"
+features.write.mode("overwrite").saveAsTable(FEATURES_TABLE)
+print(f"saved {FEATURES_TABLE}: {features.count()} returns")
+
+# --- Verification: read the saved table back from the Catalog ---
+readback = spark.table(FEATURES_TABLE)
+display(readback.orderBy("return_id"))
+
+# 1) Schema check: exactly the three contract columns (need-to-know rule:
+#    no filer identifier, no raw amounts)
+assert readback.columns == ["return_id", "tax_year", "deduction_to_income"], readback.columns
+
+# 2) Every accepted return kept exactly once
+assert readback.count() == accepted.count(), (readback.count(), accepted.count())
+assert readback.groupBy("return_id").count().where(F.col("count") > 1).count() == 0
+assert readback.where("return_id IS NULL OR tax_year IS NULL").count() == 0
+
+# 3) Nonzero result verified against an expected value derived from the source
+check_id = "R01"
+src = accepted.where(F.col("return_id") == check_id).first()
+expected_ratio = src["deduction"] / src["income"]
+saved = readback.where(F.col("return_id") == check_id).first()
+assert math.isclose(saved["deduction_to_income"], expected_ratio, rel_tol=1e-9), (
+    saved["deduction_to_income"], expected_ratio
+)
+print(f"nonzero check: {check_id} deduction {src['deduction']} / income {src['income']} "
+      f"= {expected_ratio}; saved value {saved['deduction_to_income']} matches")
+
+# 4) Zero-income case: kept with a null ratio
+zero_income_ids = [r["return_id"] for r in accepted.where(F.col("income") == 0).collect()]
+for rid in zero_income_ids:
+    row = readback.where(F.col("return_id") == rid).first()
+    assert row is not None and row["deduction_to_income"] is None, rid
+    print(f"zero-income return {rid} kept in the saved table with a null ratio")
+
+print(f"all checks passed: {FEATURES_TABLE} holds {readback.count()} returns, one row each, "
+      "columns exactly [return_id, tax_year, deduction_to_income]")
 
 # COMMAND ----------
 
