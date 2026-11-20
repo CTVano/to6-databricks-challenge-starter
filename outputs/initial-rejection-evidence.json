@@ -1,0 +1,32 @@
+[
+  {
+    "source_table": "training.to6_challenge3_inputs.returns_initial",
+    "return_id": "R01",
+    "taxpayer_id": "F0",
+    "tax_year": 2022,
+    "income": 100,
+    "deduction": 20,
+    "row_count": 2,
+    "rejection_reason": "duplicate return_id: occurs 2 times; each return must occur exactly once"
+  },
+  {
+    "source_table": "training.to6_challenge3_inputs.returns_initial",
+    "return_id": "R01",
+    "taxpayer_id": "F0",
+    "tax_year": 2022,
+    "income": 100,
+    "deduction": 20,
+    "row_count": 2,
+    "rejection_reason": "duplicate return_id: occurs 2 times; each return must occur exactly once"
+  },
+  {
+    "source_table": "training.to6_challenge3_inputs.returns_initial",
+    "return_id": "R02",
+    "taxpayer_id": "F1",
+    "tax_year": 2022,
+    "income": null,
+    "deduction": 33,
+    "row_count": 1,
+    "rejection_reason": "missing required value: income"
+  }
+]
