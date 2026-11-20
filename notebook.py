@@ -305,4 +305,140 @@ print(f"all checks passed: {FEATURES_TABLE} holds {readback.count()} returns, on
 
 # COMMAND ----------
 
-# Your implementation, rerun comparison and exports here.
+# DBTITLE 1,Stage 4: Year tables, rerun evidence, exports and handoff
+# Stage 4 — Make the handoff usable.
+#
+# From the SAVED features, split by tax year: features_train = 2022,
+# features_validation = 2023, features_test = 2024. Every accepted return
+# lands in exactly one table, in its assigned year. Tables are overwritten on
+# each run (no appended copies), and every run's actual return IDs and values
+# are kept in outputs/run-evidence.json so two complete successful runs can be
+# compared. The handoff is written to SUBMISSION.md.
+
+from pyspark.sql import functions as F
+from datetime import datetime, timezone
+import json
+
+# 1) Split the saved features by year (read back from the Catalog)
+saved_features = spark.table(FEATURES_TABLE)
+YEAR_TABLES = {
+    2022: f"{OUTPUT_SCHEMA}.features_train",
+    2023: f"{OUTPUT_SCHEMA}.features_validation",
+    2024: f"{OUTPUT_SCHEMA}.features_test",
+}
+unassigned = [
+    r["tax_year"]
+    for r in saved_features.select("tax_year").distinct()
+    .where(~F.col("tax_year").isin(list(YEAR_TABLES))).collect()
+]
+assert not unassigned, f"returns outside the assigned years: {unassigned}"
+
+for year, table in YEAR_TABLES.items():
+    saved_features.where(F.col("tax_year") == year).write.mode("overwrite").saveAsTable(table)
+
+# 2) Read the three saved tables back and verify the split
+split_frames = {}
+for year, table in YEAR_TABLES.items():
+    frame = spark.table(table)
+    assert frame.where(F.col("tax_year") != year).count() == 0, table
+    print(f"{table}: {frame.count()} returns, all tax_year = {year}")
+    split_frames[table] = frame
+
+combined = None
+for frame in split_frames.values():
+    combined = frame if combined is None else combined.unionByName(frame)
+assert combined.count() == saved_features.count() == combined.select("return_id").distinct().count(), (
+    "every accepted return must appear exactly once across the three tables"
+)
+feature_ids = {r["return_id"] for r in saved_features.select("return_id").collect()}
+split_ids = {r["return_id"] for r in combined.select("return_id").collect()}
+assert feature_ids == split_ids, "the split tables must hold exactly the accepted returns"
+print(f"split verified: {len(split_ids)} returns, each in exactly one table, in its assigned year")
+
+# 3) Keep this run's actual IDs and values; compare the latest two complete runs
+def rows(frame):
+    return [[r["return_id"], r["tax_year"], r["deduction_to_income"]]
+            for r in frame.orderBy("return_id").collect()]
+
+try:
+    workspace_url = spark.conf.get("spark.databricks.workspaceUrl")
+except Exception:
+    workspace_url = None
+notebook_path = "/Workspace/Users/chad.t.vanorsdale.irs@catalyte.ai/to6-databricks-challenge-starter/notebook"
+run_record = {
+    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    "notebook_url": f"{workspace_url}{notebook_path}" if workspace_url else notebook_path,
+    "tables": {
+        FEATURES_TABLE: rows(saved_features),
+        **{table: rows(frame) for table, frame in split_frames.items()},
+    },
+}
+evidence_path = repo_root / "outputs" / "run-evidence.json"
+runs = json.loads(evidence_path.read_text(encoding="utf-8")) if evidence_path.exists() else []
+runs.append(run_record)
+evidence_path.write_text(json.dumps(runs, indent=2) + "\n", encoding="utf-8")
+if len(runs) >= 2:
+    same = runs[-1]["tables"] == runs[-2]["tables"]
+    print("comparison of the latest two complete runs: "
+          + ("identical return IDs and values" if same else "DIFFERENT — investigate"))
+else:
+    print("first recorded run; rerun all stages to compare two complete successful runs")
+
+# 4) Small synthetic exports of the saved tables
+for name, frame in [(FEATURES_TABLE, saved_features), *split_frames.items()]:
+    export_path = repo_root / "outputs" / f"{name.split('.')[-1]}.csv"
+    frame.orderBy("return_id").toPandas().to_csv(export_path, index=False)
+    print(f"exported {export_path.name}")
+
+# 5) Handoff: SUBMISSION.md
+submission = f"""# Handoff — checked feature dataset (to6 challenge 3)
+
+## Inputs
+- `training.to6_challenge3_inputs.returns_initial` — initial delivery, REJECTED by the checks below
+- `training.to6_challenge3_inputs.returns_corrected` — replacement delivery, ACCEPTED, used for the final run
+- `training.to6_challenge3_inputs.parsed_source` — upstream source named by the supplied lineage view
+- `training.to6_challenge3_inputs.source_lineage` — supplied lineage view
+
+## Outputs
+- `{FEATURES_TABLE}` — return_id, tax_year, deduction_to_income; every accepted return once
+- `{YEAR_TABLES[2022]}` — tax_year 2022
+- `{YEAR_TABLES[2023]}` — tax_year 2023
+- `{YEAR_TABLES[2024]}` — tax_year 2024
+
+## Ratio definition
+`deduction_to_income = deduction / income`. A zero-income return keeps a null ratio
+(zero income itself is valid data); nothing is coerced to zero.
+
+## Checks performed
+- Stage 2 — completeness (required values: return_id, tax_year, income, deduction) and
+  uniqueness (each return exactly once) applied to both batches. Initial batch REJECTED
+  (R01 duplicated; R02 missing income); affected records and reasons preserved in
+  `outputs/initial-rejection-evidence.json`. Corrected batch ACCEPTED under the same rules.
+- Stage 3 — features written only from the ACCEPTED batch; columns exactly
+  [return_id, tax_year, deduction_to_income] (filer identifier and raw amounts excluded);
+  nonzero ratio verified against the source (R01: 20/100 = 0.2); zero-income returns
+  (R03, R09) present with null ratios; saved table read back from the Catalog.
+- Stage 4 — every accepted return in exactly one year table, in its assigned year;
+  each run's actual IDs and values recorded in `outputs/run-evidence.json` and the latest
+  two complete runs compared; tables are overwritten each run (no appended copies).
+
+## Run references
+- Per-run timestamps and notebook URL: `outputs/run-evidence.json`.
+
+## Final exports (this Databricks Git folder)
+- `SUBMISSION.md` — this handoff
+- `outputs/initial-rejection-evidence.json` — rejected records with reasons
+- `outputs/return_features.csv`, `outputs/features_train.csv`,
+  `outputs/features_validation.csv`, `outputs/features_test.csv`
+- `outputs/run-evidence.json` — per-run IDs and values plus the two-run comparison
+
+## Could not verify
+- Nonnegativity of source amounts is asserted by the Catalog description; not re-checked
+  against the raw values in this run.
+- The supplied `source_lineage` view is the only lineage evidence; its own description
+  notes it does not claim a Catalog UI lineage check.
+- Both compared runs executed in this interactive notebook on the attached compute; no
+  separate Jobs run IDs exist for them.
+"""
+(repo_root / "SUBMISSION.md").write_text(submission, encoding="utf-8")
+print("wrote SUBMISSION.md")
